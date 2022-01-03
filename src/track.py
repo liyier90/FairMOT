@@ -226,7 +226,7 @@ def main(
 
 
 if __name__ == "__main__":
-    os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+    # os.environ["CUDA_VISIBLE_DEVICES"] = "1"
     opt = opts().init()
 
     if not opt.val_mot16:
@@ -245,7 +245,7 @@ if __name__ == "__main__":
                       MOT16-10
                       MOT16-11
                       MOT16-13"""
-        data_root = os.path.join(opt.data_dir, "MOT16/train")
+        data_root = os.path.join(opt.data_dir, "MOT16-short/train")
     if opt.test_mot16:
         seqs_str = """MOT16-01
                       MOT16-03
@@ -314,14 +314,17 @@ if __name__ == "__main__":
         data_root = os.path.join(opt.data_dir, "MOT20/images/test")
     seqs = [seq.strip() for seq in seqs_str.split()]
 
-    print(opt)
+    # print(opt)
+    # print(data_root)
 
-    # main(
-    #     opt,
-    #     data_root=data_root,
-    #     seqs=seqs,
-    #     exp_name="MOT17_test_public_dla34",
-    #     show_image=False,
-    #     save_images=False,
-    #     save_videos=False,
-    # )
+    main(
+        opt,
+        data_root=data_root,
+        seqs=seqs,
+        exp_name="MOT17_test_public_dla34",
+        show_image=False,
+        save_images=False,
+        save_videos=False,
+    )
+
+# python track.py mot --load_model /home/yier/code/peekingduck_weights/fairmot/fairmot_dla34.pth --data_dir /home/yier/Datasets --val_mot16 true

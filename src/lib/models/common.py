@@ -10,7 +10,10 @@ import torch
 import torch.nn as nn
 from PIL import Image
 from torch.cuda import amp
-from dcn_v2 import DCN
+
+from .networks.dcn import DeformableConv2d as DCN
+
+# from dcn_v2 import DCN
 
 
 def autopad(k, p=None):  # kernel, padding
@@ -27,11 +30,17 @@ def DWConv(c1, c2, k=1, s=1, act=True):
 
 class Conv(nn.Module):
     # Standard convolution
-    def __init__(self, c1, c2, k=1, s=1, p=None, g=1, act=True):  # ch_in, ch_out, kernel, stride, padding, groups
+    def __init__(
+        self, c1, c2, k=1, s=1, p=None, g=1, act=True
+    ):  # ch_in, ch_out, kernel, stride, padding, groups
         super(Conv, self).__init__()
         self.conv = nn.Conv2d(c1, c2, k, s, autopad(k, p), groups=g, bias=False)
         self.bn = nn.BatchNorm2d(c2)
-        self.act = nn.SiLU() if act is True else (act if isinstance(act, nn.Module) else nn.Identity())
+        self.act = (
+            nn.SiLU()
+            if act is True
+            else (act if isinstance(act, nn.Module) else nn.Identity())
+        )
 
     def forward(self, x):
         return self.act(self.bn(self.conv(x)))
@@ -51,7 +60,8 @@ class DeConv(nn.Module):
             stride=s,
             padding=1,
             output_padding=0,
-            bias=False)
+            bias=False,
+        )
         self.bn = nn.BatchNorm2d(c2)
         self.act = nn.SiLU()
 
@@ -62,11 +72,10 @@ class DeConv(nn.Module):
 def fill_up_weights(up):
     w = up.weight.data
     f = math.ceil(w.size(2) / 2)
-    c = (2 * f - 1 - f % 2) / (2. * f)
+    c = (2 * f - 1 - f % 2) / (2.0 * f)
     for i in range(w.size(2)):
         for j in range(w.size(3)):
-            w[0, 0, i, j] = \
-                (1 - math.fabs(i / f - c)) * (1 - math.fabs(j / f - c))
+            w[0, 0, i, j] = (1 - math.fabs(i / f - c)) * (1 - math.fabs(j / f - c))
     for c in range(1, w.size(0)):
         w[c, 0, :, :] = w[0, 0, :, :]
 
@@ -76,9 +85,15 @@ class DeConvDCN(nn.Module):
     def __init__(self, c1, c2, k=4, s=2):
         super(DeConvDCN, self).__init__()
         self.layers = []
-        dcn = DCN(c1, c2,
-                 kernel_size=(3, 3), stride=1,
-                 padding=1, dilation=1, deformable_groups=1)
+        dcn = DCN(
+            c1,
+            c2,
+            kernel_size=(3, 3),
+            stride=1,
+            padding=1,
+            dilation=1,
+            deformable_groups=1,
+        )
         deconv = nn.ConvTranspose2d(
             in_channels=c2,
             out_channels=c2,
@@ -86,7 +101,8 @@ class DeConvDCN(nn.Module):
             stride=s,
             padding=1,
             output_padding=0,
-            bias=False)
+            bias=False,
+        )
         fill_up_weights(deconv)
         self.layers.append(dcn)
         self.layers.append(nn.BatchNorm2d(c2))
@@ -125,7 +141,9 @@ class TransformerBlock(nn.Module):
         if c1 != c2:
             self.conv = Conv(c1, c2)
         self.linear = nn.Linear(c2, c2)  # learnable position embedding
-        self.tr = nn.Sequential(*[TransformerLayer(c2, num_heads) for _ in range(num_layers)])
+        self.tr = nn.Sequential(
+            *[TransformerLayer(c2, num_heads) for _ in range(num_layers)]
+        )
         self.c2 = c2
 
     def forward(self, x):
@@ -148,7 +166,9 @@ class TransformerBlock(nn.Module):
 
 class Bottleneck(nn.Module):
     # Standard bottleneck
-    def __init__(self, c1, c2, shortcut=True, g=1, e=0.5):  # ch_in, ch_out, shortcut, groups, expansion
+    def __init__(
+        self, c1, c2, shortcut=True, g=1, e=0.5
+    ):  # ch_in, ch_out, shortcut, groups, expansion
         super(Bottleneck, self).__init__()
         c_ = int(c2 * e)  # hidden channels
         self.cv1 = Conv(c1, c_, 1, 1)
@@ -161,7 +181,9 @@ class Bottleneck(nn.Module):
 
 class BottleneckCSP(nn.Module):
     # CSP Bottleneck https://github.com/WongKinYiu/CrossStagePartialNetworks
-    def __init__(self, c1, c2, n=1, shortcut=True, g=1, e=0.5):  # ch_in, ch_out, number, shortcut, groups, expansion
+    def __init__(
+        self, c1, c2, n=1, shortcut=True, g=1, e=0.5
+    ):  # ch_in, ch_out, number, shortcut, groups, expansion
         super(BottleneckCSP, self).__init__()
         c_ = int(c2 * e)  # hidden channels
         self.cv1 = Conv(c1, c_, 1, 1)
@@ -170,7 +192,9 @@ class BottleneckCSP(nn.Module):
         self.cv4 = Conv(2 * c_, c2, 1, 1)
         self.bn = nn.BatchNorm2d(2 * c_)  # applied to cat(cv2, cv3)
         self.act = nn.LeakyReLU(0.1, inplace=True)
-        self.m = nn.Sequential(*[Bottleneck(c_, c_, shortcut, g, e=1.0) for _ in range(n)])
+        self.m = nn.Sequential(
+            *[Bottleneck(c_, c_, shortcut, g, e=1.0) for _ in range(n)]
+        )
 
     def forward(self, x):
         y1 = self.cv3(self.m(self.cv1(x)))
@@ -180,13 +204,17 @@ class BottleneckCSP(nn.Module):
 
 class C3(nn.Module):
     # CSP Bottleneck with 3 convolutions
-    def __init__(self, c1, c2, n=1, shortcut=True, g=1, e=0.5):  # ch_in, ch_out, number, shortcut, groups, expansion
+    def __init__(
+        self, c1, c2, n=1, shortcut=True, g=1, e=0.5
+    ):  # ch_in, ch_out, number, shortcut, groups, expansion
         super(C3, self).__init__()
         c_ = int(c2 * e)  # hidden channels
         self.cv1 = Conv(c1, c_, 1, 1)
         self.cv2 = Conv(c1, c_, 1, 1)
         self.cv3 = Conv(2 * c_, c2, 1)  # act=FReLU(c2)
-        self.m = nn.Sequential(*[Bottleneck(c_, c_, shortcut, g, e=1.0) for _ in range(n)])
+        self.m = nn.Sequential(
+            *[Bottleneck(c_, c_, shortcut, g, e=1.0) for _ in range(n)]
+        )
         # self.m = nn.Sequential(*[CrossConv(c_, c_, 3, 1, g, 1.0, shortcut) for _ in range(n)])
 
     def forward(self, x):
@@ -208,7 +236,9 @@ class SPP(nn.Module):
         c_ = c1 // 2  # hidden channels
         self.cv1 = Conv(c1, c_, 1, 1)
         self.cv2 = Conv(c_ * (len(k) + 1), c2, 1, 1)
-        self.m = nn.ModuleList([nn.MaxPool2d(kernel_size=x, stride=1, padding=x // 2) for x in k])
+        self.m = nn.ModuleList(
+            [nn.MaxPool2d(kernel_size=x, stride=1, padding=x // 2) for x in k]
+        )
 
     def forward(self, x):
         x = self.cv1(x)
@@ -217,13 +247,25 @@ class SPP(nn.Module):
 
 class Focus(nn.Module):
     # Focus wh information into c-space
-    def __init__(self, c1, c2, k=1, s=1, p=None, g=1, act=True):  # ch_in, ch_out, kernel, stride, padding, groups
+    def __init__(
+        self, c1, c2, k=1, s=1, p=None, g=1, act=True
+    ):  # ch_in, ch_out, kernel, stride, padding, groups
         super(Focus, self).__init__()
         self.conv = Conv(c1 * 4, c2, k, s, p, g, act)
         # self.contract = Contract(gain=2)
 
     def forward(self, x):  # x(b,c,w,h) -> y(b,4c,w/2,h/2)
-        return self.conv(torch.cat([x[..., ::2, ::2], x[..., 1::2, ::2], x[..., ::2, 1::2], x[..., 1::2, 1::2]], 1))
+        return self.conv(
+            torch.cat(
+                [
+                    x[..., ::2, ::2],
+                    x[..., 1::2, ::2],
+                    x[..., ::2, 1::2],
+                    x[..., 1::2, 1::2],
+                ],
+                1,
+            )
+        )
         # return self.conv(self.contract(x))
 
 
@@ -234,7 +276,12 @@ class Contract(nn.Module):
         self.gain = gain
 
     def forward(self, x):
-        N, C, H, W = x.size()  # assert (H / s == 0) and (W / s == 0), 'Indivisible gain'
+        (
+            N,
+            C,
+            H,
+            W,
+        ) = x.size()  # assert (H / s == 0) and (W / s == 0), 'Indivisible gain'
         s = self.gain
         x = x.view(N, C, H // s, s, W // s, s)  # x(1,64,40,2,40,2)
         x = x.permute(0, 3, 5, 1, 2, 4).contiguous()  # x(1,2,2,64,40,40)

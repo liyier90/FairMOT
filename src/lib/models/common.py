@@ -11,7 +11,7 @@ import torch.nn as nn
 from PIL import Image
 from torch.cuda import amp
 
-from .networks.dcn import DeformableConv2d as DCN
+from .networks.dcn import DCNv2 as DCN
 
 # from dcn_v2 import DCN
 

@@ -11,7 +11,7 @@ import torch.nn.functional as F
 import torch.utils.model_zoo as model_zoo
 from torch import nn
 
-from .dcn import DeformableConv2d as DCN
+from .dcn import DCNv2 as DCN
 
 # from dcn_v2 import DCN
 

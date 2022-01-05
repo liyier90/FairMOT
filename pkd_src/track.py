@@ -1,37 +1,27 @@
+# pylint: disable=logging-fstring-interpolation
 import logging
 import os
-import os.path
-import sys
-
-lib_path = os.path.join(os.path.dirname(__file__), "lib")
-sys.path.insert(0, lib_path)
+from pathlib import Path
 
 import cv2
-import datasets.dataset.jde as datasets
 import motmetrics as mm
 import numpy as np
 import torch
+
+import datasets.dataset.jde as datasets
 from opts import opts
 from tracker.multitracker import JDETracker
 from tracking_utils import visualization as vis
 from tracking_utils.evaluation import Evaluator
 from tracking_utils.log import logger
 from tracking_utils.timer import Timer
-from tracking_utils.utils import mkdir_if_missing
 
 
-def write_results(filename, results, data_type):
-    if data_type == "mot":
-        save_format = "{frame},{id},{x1},{y1},{w},{h},1,-1,-1,-1\n"
-    elif data_type == "kitti":
-        save_format = "{frame} {id} pedestrian 0 0 -10 {x1} {y1} {x2} {y2} -10 -10 -10 -1000 -1000 -1000 -10\n"
-    else:
-        raise ValueError(data_type)
+def write_results(filename, results):
+    save_format = "{frame},{id},{x1},{y1},{w},{h},1,-1,-1,-1\n"
 
     with open(filename, "w") as f:
         for frame_id, tlwhs, track_ids in results:
-            if data_type == "kitti":
-                frame_id -= 1
             for tlwh, track_id in zip(tlwhs, track_ids):
                 if track_id < 0:
                     continue
@@ -41,45 +31,12 @@ def write_results(filename, results, data_type):
                     frame=frame_id, id=track_id, x1=x1, y1=y1, x2=x2, y2=y2, w=w, h=h
                 )
                 f.write(line)
-    logger.info("save results to {}".format(filename))
-
-
-def write_results_score(filename, results, data_type):
-    if data_type == "mot":
-        save_format = "{frame},{id},{x1},{y1},{w},{h},{s},1,-1,-1,-1\n"
-    elif data_type == "kitti":
-        save_format = "{frame} {id} pedestrian 0 0 -10 {x1} {y1} {x2} {y2} -10 -10 -10 -1000 -1000 -1000 -10\n"
-    else:
-        raise ValueError(data_type)
-
-    with open(filename, "w") as f:
-        for frame_id, tlwhs, track_ids, scores in results:
-            if data_type == "kitti":
-                frame_id -= 1
-            for tlwh, track_id, score in zip(tlwhs, track_ids, scores):
-                if track_id < 0:
-                    continue
-                x1, y1, w, h = tlwh
-                x2, y2 = x1 + w, y1 + h
-                line = save_format.format(
-                    frame=frame_id,
-                    id=track_id,
-                    x1=x1,
-                    y1=y1,
-                    x2=x2,
-                    y2=y2,
-                    w=w,
-                    h=h,
-                    s=score,
-                )
-                f.write(line)
-    logger.info("save results to {}".format(filename))
+    logger.info(f"save results to {filename}")
 
 
 def eval_seq(
     opt,
     dataloader,
-    data_type,
     result_filename,
     save_dir=None,
     show_image=True,
@@ -87,20 +44,15 @@ def eval_seq(
     use_cuda=True,
 ):
     if save_dir:
-        mkdir_if_missing(save_dir)
+        save_dir.mkdir(parents=True, exist_ok=True)
     tracker = JDETracker(opt, frame_rate=frame_rate)
     timer = Timer()
     results = []
     frame_id = 0
-    # for path, img, img0 in dataloader:
-    for i, (path, img, img0) in enumerate(dataloader):
-        # if i % 8 != 0:
-        # continue
+    for _, img, img0 in dataloader:
         if frame_id % 20 == 0:
             logger.info(
-                "Processing frame {} ({:.2f} fps)".format(
-                    frame_id, 1.0 / max(1e-5, timer.average_time)
-                )
+                f"Processing frame {frame_id} ({1.0 / max(1e-5, timer.average_time):.2f} fps)"
             )
 
         # run tracking
@@ -141,24 +93,14 @@ def eval_seq(
             )
         frame_id += 1
     # save results
-    write_results(result_filename, results, data_type)
-    # write_results_score(result_filename, results, data_type)
+    write_results(result_filename, results)
     return frame_id, timer.average_time, timer.calls
 
 
-def main(
-    opt,
-    data_root="/data/MOT16/train",
-    det_root=None,
-    seqs=("MOT16-05",),
-    exp_name="demo",
-    save_images=False,
-    save_videos=False,
-    show_image=True,
-):
+def main(opt, data_root, seqs, exp_name, save_images, save_videos, show_image):
     logger.setLevel(logging.INFO)
-    result_root = os.path.join(data_root, "..", "results", exp_name)
-    mkdir_if_missing(result_root)
+    result_root = data_root.parent / "results" / exp_name
+    result_root.mkdir(parents=True, exist_ok=True)
     data_type = "mot"
 
     # run tracking
@@ -167,23 +109,20 @@ def main(
     timer_avgs, timer_calls = [], []
     for seq in seqs:
         output_dir = (
-            os.path.join(data_root, "..", "outputs", exp_name, seq)
+            data_root.parent / "outputs" / exp_name / seq
             if save_images or save_videos
             else None
         )
-        logger.info("start seq: {}".format(seq))
-        dataloader = datasets.LoadImages(
-            os.path.join(data_root, seq, "img1"), opt.img_size
-        )
-        result_filename = os.path.join(result_root, "{}.txt".format(seq))
-        meta_info = open(os.path.join(data_root, seq, "seqinfo.ini")).read()
+        logger.info(f"start seq: {seq}")
+        dataloader = datasets.LoadImages(str(data_root / seq / "img1"), opt.img_size)
+        result_filename = str(result_root / f"{seq}.txt")
+        meta_info = (data_root / seq / "seqinfo.ini").read_text()
         frame_rate = int(
             meta_info[meta_info.find("frameRate") + 10 : meta_info.find("\nseqLength")]
         )
         nf, ta, tc = eval_seq(
             opt,
             dataloader,
-            data_type,
             result_filename,
             save_dir=output_dir,
             show_image=show_image,
@@ -194,22 +133,19 @@ def main(
         timer_calls.append(tc)
 
         # eval
-        logger.info("Evaluate seq: {}".format(seq))
+        logger.info(f"Evaluate seq: {seq}")
         evaluator = Evaluator(data_root, seq, data_type)
         accs.append(evaluator.eval_file(result_filename))
         if save_videos:
-            output_video_path = os.path.join(output_dir, "{}.mp4".format(seq))
-            cmd_str = "ffmpeg -f image2 -i {}/%05d.jpg -c:v copy {}".format(
-                output_dir, output_video_path
+            output_video_path = output_dir / f"{seq}.mp4"
+            os.system(
+                f"ffmpeg -f image2 -i {output_dir}/%05d.jpg -c:v copy {output_video_path}"
             )
-            os.system(cmd_str)
     timer_avgs = np.asarray(timer_avgs)
     timer_calls = np.asarray(timer_calls)
     all_time = np.dot(timer_avgs, timer_calls)
     avg_time = all_time / np.sum(timer_calls)
-    logger.info(
-        "Time elapsed: {:.2f} seconds, FPS: {:.2f}".format(all_time, 1.0 / avg_time)
-    )
+    logger.info(f"Time elapsed: {all_time:.2f} seconds, FPS: {1.0 / avg_time:.2f}")
 
     # get summary
     metrics = mm.metrics.motchallenge_metrics
@@ -219,13 +155,11 @@ def main(
         summary, formatters=mh.formatters, namemap=mm.io.motchallenge_metric_names
     )
     print(strsummary)
-    Evaluator.save_summary(
-        summary, os.path.join(result_root, "summary_{}.xlsx".format(exp_name))
-    )
+    Evaluator.save_summary(summary, str(result_root / f"summary_{exp_name}.xlsx"))
 
 
 if __name__ == "__main__":
-    opt = opts().init()
+    config = opts().init()
 
     seqs_str = """MOT16-02
                   MOT16-04
@@ -234,21 +168,21 @@ if __name__ == "__main__":
                   MOT16-10
                   MOT16-11
                   MOT16-13"""
-    data_root = os.path.join(opt.data_dir, "MOT16-tiny/train")
+    data_root_dir = Path(config.data_dir) / "MOT16-tiny" / "train"
 
-    seqs = [seq.strip() for seq in seqs_str.split()]
+    sequences = [seq.strip() for seq in seqs_str.split()]
 
-    # print(opt)
-    # print(data_root)
+    # print(config)
+    # print(data_root_dir)
 
     main(
-        opt,
-        data_root=data_root,
-        seqs=seqs,
+        config,
+        data_root=data_root_dir,
+        seqs=sequences,
         exp_name="MOT17_test_public_dla34",
-        show_image=False,
         save_images=False,
         save_videos=False,
+        show_image=False,
     )
 
 # python track.py mot --load_model /home/yier/code/peekingduck_weights/fairmot/fairmot_dla34.pth --data_dir /home/yier/Datasets --val_mot16 true

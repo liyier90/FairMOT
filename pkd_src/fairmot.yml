@@ -1,0 +1,9 @@
+weights_parent_dir: "~/code/peekingduck_weights"
+weights: { model_subdir: fairmot, model_file: { dla_34: fairmot_dla34.pth } }
+
+model_type: dla_34
+
+K: 500 # max number of output objects
+min_box_area: 100
+score_threshold: 0.4
+track_buffer: 30

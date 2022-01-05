@@ -176,7 +176,7 @@ class JDETracker(object):
         else:
             opt.device = torch.device("cpu")
         print("Creating model...")
-        self.model = create_model(opt.arch, opt.heads, opt.head_conv)
+        self.model = create_model(opt.model_type, opt.heads, opt.head_conv)
         self.model = load_model(self.model, opt.load_model)
         self.model = self.model.to(opt.device)
         self.model.eval()
@@ -186,7 +186,7 @@ class JDETracker(object):
         self.removed_stracks = []  # type: list[STrack]
 
         self.frame_id = 0
-        self.det_thresh = opt.conf_thres
+        self.det_thresh = opt.score_threshold
         self.buffer_size = int(frame_rate / 30.0 * opt.track_buffer)
         self.max_time_lost = self.buffer_size
         self.max_per_image = opt.K
@@ -265,7 +265,7 @@ class JDETracker(object):
         dets = self.post_process(dets, meta)
         dets = self.merge_outputs([dets])[1]
 
-        remain_inds = dets[:, 4] > self.opt.conf_thres
+        remain_inds = dets[:, 4] > self.opt.score_threshold
         dets = dets[remain_inds]
         id_feature = id_feature[remain_inds]
 

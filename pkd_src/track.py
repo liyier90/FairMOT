@@ -1,15 +1,16 @@
 # pylint: disable=logging-fstring-interpolation
 import logging
 import os
+import types
 from pathlib import Path
 
 import cv2
 import motmetrics as mm
 import numpy as np
 import torch
+import yaml
 
 import datasets.dataset.jde as datasets
-from opts import opts
 from tracker.multitracker import JDETracker
 from tracking_utils import visualization as vis
 from tracking_utils.evaluation import Evaluator
@@ -159,7 +160,42 @@ def main(opt, data_root, seqs, exp_name, save_images, save_videos, show_image):
 
 
 if __name__ == "__main__":
-    config = opts().init()
+    # config = opts().init()
+    with open(Path(__file__).resolve().parent / "fairmot.yml") as infile:
+        config = types.SimpleNamespace(**yaml.safe_load(infile))
+    config.weights_parent_dir = Path(config.weights_parent_dir).expanduser()
+
+    # Original code specific configs
+    config.data_dir = Path("~/Datasets").expanduser()
+    config.gpus = [0]
+    config.head_conv = 256
+    config.load_model = (
+        config.weights_parent_dir
+        / config.weights["model_subdir"]
+        / config.weights["model_file"][config.model_type]
+    )
+    config.ltrb = True
+    # Regress local offset
+    config.reg_offset = True
+    config.reid_dim = 128
+    config.task = "mot"
+    # Task specific configs
+    mot_dataset_info = {
+        # "default_resolution": [608, 1088],
+        "default_resolution": [480, 864],
+        "num_classes": 1,
+        "mean": [0.408, 0.447, 0.470],
+        "std": [0.289, 0.274, 0.278],
+        "dataset": "jde",
+        "nID": 14455,
+    }
+    config.mean = mot_dataset_info["mean"]
+    config.std = mot_dataset_info["std"]
+    config.nID = mot_dataset_info["nID"]
+    config.num_classes = mot_dataset_info["num_classes"]
+    config.down_ratio = 4  # visualization related?
+    config.heads = {"hm": config.num_classes, "wh": 4, "id": config.reid_dim, "reg": 2}
+    config.img_size = (864, 480)
 
     seqs_str = """MOT16-02
                   MOT16-04
@@ -168,12 +204,12 @@ if __name__ == "__main__":
                   MOT16-10
                   MOT16-11
                   MOT16-13"""
-    data_root_dir = Path(config.data_dir) / "MOT16-tiny" / "train"
+    data_root_dir = config.data_dir / "MOT16-short" / "train"
 
     sequences = [seq.strip() for seq in seqs_str.split()]
 
-    # print(config)
-    # print(data_root_dir)
+    print(config)
+    print(data_root_dir)
 
     main(
         config,

@@ -11,7 +11,7 @@ import torch.nn.functional as F
 import torch.utils.model_zoo as model_zoo
 from torch import nn
 
-from .dcn import DCNv2 as DCN
+from .dcn import DCNv2
 
 # from dcn_v2 import DCN
 
@@ -443,7 +443,7 @@ class DeformConv(nn.Module):
         self.actf = nn.Sequential(
             nn.BatchNorm2d(cho, momentum=BN_MOMENTUM), nn.ReLU(inplace=True)
         )
-        self.conv = DCN(
+        self.conv = DCNv2(
             chi,
             cho,
             kernel_size=(3, 3),

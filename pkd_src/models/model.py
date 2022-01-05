@@ -5,10 +5,10 @@ from .networks.pose_dla_dcn import get_pose_net as get_dla_dcn
 _model_factory = {"dla": get_dla_dcn}
 
 
-def create_model(arch, heads, head_conv):
-    num_layers = int(arch[arch.find("_") + 1 :]) if "_" in arch else 0
-    arch = arch[: arch.find("_")] if "_" in arch else arch
-    get_model = _model_factory[arch]
+def create_model(model_type, heads, head_conv):
+    num_layers = int(model_type[model_type.find("_") + 1 :]) if "_" in model_type else 0
+    model_type = model_type[: model_type.find("_")] if "_" in model_type else model_type
+    get_model = _model_factory[model_type]
     model = get_model(num_layers=num_layers, heads=heads, head_conv=head_conv)
     return model
 
@@ -31,9 +31,9 @@ def load_model(model, model_path, optimizer=None, resume=False, lr=None, lr_step
     # check loaded parameters and created model parameters
     msg = (
         "If you see this, your model does not fully load the "
-        + "pre-trained weight. Please make sure "
-        + "you have correctly specified --arch xxx "
-        + "or set the correct --num_classes for your own dataset."
+        "pre-trained weight. Please make sure "
+        "you have correctly specified --arch xxx "
+        "or set the correct --num_classes for your own dataset."
     )
     for k in state_dict:
         if k in model_state_dict:

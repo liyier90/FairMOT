@@ -77,7 +77,6 @@ def eval_seq(
         timer.toc()
         # save results
         results.append((frame_id + 1, online_tlwhs, online_ids))
-        # results.append((frame_id + 1, online_tlwhs, online_ids, online_scores))
         if show_image or save_dir is not None:
             online_im = vis.plot_tracking(
                 img0,
@@ -160,7 +159,6 @@ def main(opt, data_root, seqs, exp_name, save_images, save_videos, show_image):
 
 
 if __name__ == "__main__":
-    # config = opts().init()
     with open(Path(__file__).resolve().parent / "fairmot.yml") as infile:
         config = types.SimpleNamespace(**yaml.safe_load(infile))
     config.weights_parent_dir = Path(config.weights_parent_dir).expanduser()

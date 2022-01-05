@@ -1,26 +1,20 @@
-from __future__ import absolute_import, division, print_function
-
 import logging
 import math
-import os
-from os.path import join
+from pathlib import Path
 
 import numpy as np
 import torch
 import torch.nn.functional as F
-import torch.utils.model_zoo as model_zoo
 from torch import nn
 
 from .dcn import DCNv2
-
-# from dcn_v2 import DCN
 
 BN_MOMENTUM = 0.1
 logger = logging.getLogger(__name__)
 
 
-def get_model_url(data="imagenet", name="dla34", hash="ba72cf86"):
-    return join("http://dl.yf.io/dla/models", data, "{}-{}.pth".format(name, hash))
+# def get_model_url(data="imagenet", name="dla34", hash="ba72cf86"):
+#     return join("http://dl.yf.io/dla/models", data, "{}-{}.pth".format(name, hash))
 
 
 def conv3x3(in_planes, out_planes, stride=1):
@@ -382,13 +376,10 @@ class DLA(nn.Module):
             y.append(x)
         return y
 
-    def load_pretrained_model(self, data="imagenet", name="dla34", hash="ba72cf86"):
-        # fc = self.fc
-        if name.endswith(".pth"):
-            model_weights = torch.load(data + name)
-        else:
-            model_url = get_model_url(data, name, hash)
-            model_weights = model_zoo.load_url(model_url)
+    def load_pretrained_model(self):
+        model_weights = torch.load(
+            Path("~/code/peekingduck_weights/fairmot/dla34-ba72cf86.pth").expanduser()
+        )
         num_classes = len(model_weights[list(model_weights.keys())[-1]])
         self.fc = nn.Conv2d(
             self.channels[-1],
@@ -399,7 +390,6 @@ class DLA(nn.Module):
             bias=True,
         )
         self.load_state_dict(model_weights)
-        # self.fc = fc
 
 
 def dla34(pretrained=True, **kwargs):  # DLA-34
@@ -407,7 +397,7 @@ def dla34(pretrained=True, **kwargs):  # DLA-34
         [1, 1, 1, 2, 2, 1], [16, 32, 64, 128, 256, 512], block=BasicBlock, **kwargs
     )
     if pretrained:
-        model.load_pretrained_model(data="imagenet", name="dla34", hash="ba72cf86")
+        model.load_pretrained_model()
     return model
 
 
@@ -546,7 +536,7 @@ class DLASeg(nn.Module):
         head_conv,
         out_channel=0,
     ):
-        super(DLASeg, self).__init__()
+        super().__init__()
         assert down_ratio in [2, 4, 8, 16]
         self.first_level = int(np.log2(down_ratio))
         self.last_level = last_level

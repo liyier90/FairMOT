@@ -83,7 +83,7 @@ class LoadImages:  # for inference
 
 class LoadVideo:  # for inference
     def __init__(self, path, img_size=(1088, 608)):
-        self.cap = cv2.VideoCapture(path)
+        self.cap = cv2.VideoCapture(str(path))
         self.frame_rate = int(round(self.cap.get(cv2.CAP_PROP_FPS)))
         self.vw = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         self.vh = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))

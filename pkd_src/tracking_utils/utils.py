@@ -11,7 +11,6 @@ import torch
 import torch.nn.functional as F
 from torchvision.ops import nms
 
-# import maskrcnn_benchmark.layers.nms as nms
 # Set printoptions
 torch.set_printoptions(linewidth=1320, precision=5, profile="long")
 np.set_printoptions(
